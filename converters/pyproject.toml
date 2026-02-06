@@ -1,0 +1,13 @@
+[project]
+name = "converters"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fastjsonschema>=2.21.2",
+    "hypernetx>=2.4.0",
+    "pandas>=3.0.0",
+    "requests>=2.32.5",
+    "zstandard>=0.25.0",
+]

@@ -6,6 +6,7 @@ import zstandard as zstd
 import pandas as pd
 import hypernetx as hnx
 import ast
+import pickle
 from collections import defaultdict
 
 
@@ -243,6 +244,24 @@ def convert_cora_to_hif():
     hnx.to_hif(H, "path/to/cora.json")
     compress_to_zst("path/to/cora.json")
 
+# https://github.com/malllabiisc/HyperGCN/tree/master/data/cocitation/pubmed
+def convert_pubmed_to_hif():
+    hypergraph = pickle.load(open("../pubmed/hypergraph.pickle", "rb"))
+    features = pickle.load(open("../pubmed/features.pickle", "rb")).todense()
+    rows = []
+    for edge_id, (paper_id, cited_papers) in enumerate(hypergraph.items()):
+        for cited_paper in cited_papers:
+            rows.append({"edges": edge_id, "nodes": cited_paper})
+    
+    hg_df = pd.DataFrame(rows)
+    node_attrs = {}
+    for node_id in range(features.shape[0]):
+        node_attrs[str(node_id)] = {
+            "features": features[node_id].tolist()
+        }
+    H = hnx.Hypergraph(hg_df, node_properties=node_attrs)
+    hnx.to_hif(H, "../pubmed/pubmed.json")
+    compress_to_zst("../pubmed/pubmed.json")
 
 if __name__ == "__main__":
     # convert_patent_to_hif()
@@ -250,4 +269,5 @@ if __name__ == "__main__":
     # convert_imdb_to_hif()
     # convert_arxiv_to_hif() #TODO fix
     # convert_cora_to_hif()
+    # convert_pubmed_to_hif()
     print("Done")
