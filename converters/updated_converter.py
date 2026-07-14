@@ -1,4 +1,5 @@
 import os
+import json
 import pickle
 import networkx as nx
 import pandas as pd
@@ -53,7 +54,6 @@ def cora_converter():
         node_attrs[paper_id] = attrs
 
     H = hnx.Hypergraph(hg_df, node_properties=node_attrs)
-    print(H)
     hnx.to_hif(H, os.path.join(output_dir, "cora.json"))
     compress_to_zst(os.path.join(output_dir, "cora.json"))
     prettify_json(os.path.join(output_dir, "cora.json"))
@@ -87,6 +87,50 @@ def convert_pubmed_to_hif():
     compress_to_zst(os.path.join(output_dir, "pubmed.json"))
     prettify_json(os.path.join(output_dir, "pubmed.json"))
 
+# https://github.com/malllabiisc/HyperGCN/tree/master/data/cocitation/citeseer
+def convert_citeseer_to_hif():
+    path = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(path, "citeseer")
+    output_dir = os.path.join(data_dir, "output")
+    hypergraph = pickle.load(open(os.path.join(data_dir, "hypergraph.pickle"), "rb"))
+    features = pickle.load(open(os.path.join(data_dir, "features.pickle"), "rb")).toarray()
+    labels = pickle.load(open(os.path.join(data_dir, "labels.pickle"), "rb"))
+    # convert labes from np.int64 to int
+    labels = [int(label) for label in labels]
+
+    rows = []
+    for edge_id, (paper_id, cited_papers) in enumerate(hypergraph.items()):
+        for cited_paper in cited_papers:
+            rows.append({"edges": edge_id, "nodes": cited_paper})
+    
+    hg_df = pd.DataFrame(rows)
+    node_attrs = {}
+    for node_id in range(features.shape[0]):
+        node_attrs[node_id] = {
+            "label": int(labels[node_id]),
+            **{f"f{ii}": float(features[node_id, ii]) for ii in range(features.shape[1])},
+        }
+
+    node_attrs = pd.DataFrame.from_dict(node_attrs, orient="index")
+    
+    hif_json = {
+        "network-type": "undirected",
+        "metadata": {},
+        "incidences": [
+            {"edge": str(row["edges"]), "node": str(row["nodes"])} for _, row in hg_df.iterrows()
+        ],
+        "nodes": [
+            {"node": str(node_id), "attrs": attrs.to_dict()} for node_id, attrs in node_attrs.iterrows()
+        ],
+        "edges": [
+            {"edge": str(edge_id)} for edge_id in hg_df["edges"].unique()
+        ],
+    }
+
+    json.dump(hif_json, open(os.path.join(output_dir, "citeseer.json"), "w"), indent=4)
+    compress_to_zst(os.path.join(output_dir, "citeseer.json"))
+
 if __name__ == "__main__":
-    # cora_converter()
+    cora_converter()
     convert_pubmed_to_hif()
+    convert_citeseer_to_hif()
