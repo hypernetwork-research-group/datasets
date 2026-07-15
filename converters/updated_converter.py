@@ -1,10 +1,8 @@
 import os
-import json
 import pickle
-import networkx as nx
 import pandas as pd
-import hypernetx as hnx
 import zstandard as zstd
+import json 
 
 def compress_to_zst(filename):
     json_filename = filename.rsplit(".", 1)[0] + ".json"
@@ -21,7 +19,7 @@ def prettify_json(json_filename):
     with open(json_filename, "w") as f:
         f.write(data)
 
-def cora_converter():
+def convert_cora_to_hif():
     path = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(path, "cora")
     output_dir = os.path.join(data_dir, "output")
@@ -33,7 +31,6 @@ def cora_converter():
     feature_names = ["w_{}".format(ii) for ii in range(1433)]
     column_names = ["paper_id"] + feature_names + ["subject"]
     node_data = pd.read_csv(path, sep="\t", header=None, names=column_names)
-
     paper_to_citations = edgelist.groupby("target")["source"].apply(list).to_dict()
 
     rows = []
@@ -49,12 +46,25 @@ def cora_converter():
         attrs = {
             "label": row["subject"],
             # "features": row[feature_names].values.tolist(),
-            "attrs": {f"{w}": row[w] for w in feature_names}
+            **{f"{w}": row[w] for w in feature_names}
         }
         node_attrs[paper_id] = attrs
 
-    H = hnx.Hypergraph(hg_df, node_properties=node_attrs)
-    hnx.to_hif(H, os.path.join(output_dir, "cora.json"))
+    hif_json = {
+        "network-type": "undirected",
+        "metadata": {},
+        "incidences": [
+            {"edge": str(row["edges"]), "node": str(row["nodes"])} for _, row in hg_df.iterrows()
+        ],
+        "nodes": [
+            {"node": str(node_id), "attrs": attrs} for node_id, attrs in node_attrs.items()
+        ],
+        "edges": [
+            {"edge": str(edge_id)} for edge_id in hg_df["edges"].unique()
+        ],
+    }
+    with open(os.path.join(output_dir, "cora.json"), "w") as f:
+        json.dump(hif_json, f)
     compress_to_zst(os.path.join(output_dir, "cora.json"))
     prettify_json(os.path.join(output_dir, "cora.json"))
 
@@ -77,17 +87,31 @@ def convert_pubmed_to_hif():
     node_attrs = {}
     for node_id in range(features.shape[0]):
         attrs = {
-            "attrs": {f"f{ii}": float(features[node_id][ii]) for ii in range(len(features[node_id]))},
+            **{f"f{ii}": float(features[node_id][ii]) for ii in range(len(features[node_id]))},
             "label": labels[node_id]
         }
         node_attrs[node_id] = attrs
 
-    H = hnx.Hypergraph(hg_df, node_properties=node_attrs)
-    hnx.to_hif(H, os.path.join(output_dir, "pubmed.json"))
+    hif_json = {
+        "network-type": "undirected",
+        "metadata": {},
+        "incidences": [
+            {"edge": str(row["edges"]), "node": str(row["nodes"])} for _, row in hg_df.iterrows()
+        ],
+        "nodes": [
+            {"node": str(node_id), "attrs": attrs} for node_id, attrs in node_attrs.items()
+        ],
+        "edges": [
+            {"edge": str(edge_id)} for edge_id in hg_df["edges"].unique()
+        ],
+    }
+
+    with open(os.path.join(output_dir, "pubmed.json"), "w") as f:
+        json.dump(hif_json, f)
+
     compress_to_zst(os.path.join(output_dir, "pubmed.json"))
     prettify_json(os.path.join(output_dir, "pubmed.json"))
 
-# https://github.com/malllabiisc/HyperGCN/tree/master/data/cocitation/citeseer
 def convert_citeseer_to_hif():
     path = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(path, "citeseer")
@@ -131,6 +155,6 @@ def convert_citeseer_to_hif():
     compress_to_zst(os.path.join(output_dir, "citeseer.json"))
 
 if __name__ == "__main__":
-    cora_converter()
+    convert_cora_to_hif()
     convert_pubmed_to_hif()
-    convert_citeseer_to_hif()
+    # convert_citeseer_to_hif()
